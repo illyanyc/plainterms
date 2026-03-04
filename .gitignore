@@ -9,6 +9,8 @@ venv/
 extension/.output/
 extension/.wxt/
 extension/dist/
+website/.next/
+website/out/
 
 # Environment
 .env

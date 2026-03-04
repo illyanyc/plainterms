@@ -1,0 +1,17 @@
+[build]
+  base = "website"
+  command = "npm run build"
+  publish = "out"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[redirects]]
+  from = "/chrome"
+  to = "https://chrome.google.com/webstore/detail/plainterms/YOUR_EXTENSION_ID"
+  status = 301
+  force = true
