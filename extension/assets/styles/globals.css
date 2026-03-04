@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .section-card {
+    @apply rounded-lg border border-gray-200 dark:border-gray-800 p-3 mb-3;
+  }
+
+  .section-header {
+    @apply flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2 cursor-pointer select-none;
+  }
+
+  .badge-critical {
+    @apply inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400;
+  }
+
+  .badge-info {
+    @apply inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400;
+  }
+
+  .badge-good {
+    @apply inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400;
+  }
+
+  .shimmer {
+    @apply animate-pulse rounded bg-gray-200 dark:bg-gray-800;
+  }
+}
