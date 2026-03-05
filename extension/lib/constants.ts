@@ -7,9 +7,10 @@ export const STORAGE_KEYS = {
   USAGE: "plainterms_usage",
   ENABLED: "plainterms_enabled",
   BACKEND_URL: "plainterms_backend_url",
+  JWT_TOKEN: "plainterms_jwt_token",
 } as const;
 
-export const DEFAULT_BACKEND_URL = "http://localhost:8000";
+export const DEFAULT_BACKEND_URL = "https://plainterms-production.up.railway.app";
 
 export const POLICY_KEYWORDS: Record<PolicyType, string[]> = {
   privacy: [

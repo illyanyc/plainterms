@@ -3,7 +3,7 @@ import time
 from typing import AsyncGenerator
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from models.request import AnalyzeRequest
@@ -14,18 +14,19 @@ from services.reputation import get_reputation_snapshot
 from services.user_store import user_store
 from utils.rate_limiter import burst_limiter
 from utils.cache import analysis_cache, reputation_cache
+from utils.auth import require_auth
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
 
 @router.post("/analyze/quick")
-async def analyze_quick(request: AnalyzeRequest):
+async def analyze_quick(request: AnalyzeRequest, client_id: str = Depends(require_auth)):
     """Quick analysis (Free: 5/day, Pro: 20/day, Enterprise: unlimited)."""
-    if not burst_limiter.is_allowed(request.client_id):
-        retry = burst_limiter.retry_after(request.client_id)
+    if not burst_limiter.is_allowed(client_id):
+        retry = burst_limiter.retry_after(client_id)
         raise HTTPException(status_code=429, detail=f"Too many requests. Retry after {retry}s")
 
-    user = user_store.get_or_create(request.client_id)
+    user = user_store.get_or_create(client_id)
     if not user.can_quick_scan():
         tier = user.tier.value
         limit = int(user.quick_limit) if user.quick_limit != float("inf") else "unlimited"
@@ -49,13 +50,13 @@ async def analyze_quick(request: AnalyzeRequest):
 
 
 @router.post("/analyze/deep")
-async def analyze_deep(request: AnalyzeRequest):
+async def analyze_deep(request: AnalyzeRequest, client_id: str = Depends(require_auth)):
     """Deep analysis (Pro: 50/month, Enterprise: unlimited). Free tier blocked."""
-    if not burst_limiter.is_allowed(request.client_id):
-        retry = burst_limiter.retry_after(request.client_id)
+    if not burst_limiter.is_allowed(client_id):
+        retry = burst_limiter.retry_after(client_id)
         raise HTTPException(status_code=429, detail=f"Too many requests. Retry after {retry}s")
 
-    user = user_store.get_or_create(request.client_id)
+    user = user_store.get_or_create(client_id)
     if not user.can_deep_scan():
         if user.tier.value == "free":
             raise HTTPException(status_code=403, detail="Deep scans require a Pro subscription.")

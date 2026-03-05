@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from models.user import Tier, UserStatusResponse, UpgradeRequest
 from services.user_store import user_store
 from services.billing import create_customer, create_checkout_session, create_portal_session
+from utils.auth import create_token, require_auth
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -15,6 +16,7 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     client_id: str
     tier: str
+    token: str
     message: str
 
 
@@ -23,8 +25,7 @@ class UpgradeResponse(BaseModel):
 
 
 class PortalRequest(BaseModel):
-    client_id: str
-    return_url: str = "https://plainterms.com"
+    return_url: str = "https://plain-terms.app"
 
 
 class PortalResponse(BaseModel):
@@ -33,17 +34,19 @@ class PortalResponse(BaseModel):
 
 @router.post("/register", response_model=RegisterResponse)
 async def register(request: RegisterRequest):
-    """Register an anonymous user (or return existing). Called on extension install."""
+    """Register an anonymous user (or return existing). Returns a JWT for future requests."""
     user = user_store.get_or_create(request.client_id)
+    token = create_token(user.client_id)
     return RegisterResponse(
         client_id=user.client_id,
         tier=user.tier.value,
+        token=token,
         message="registered",
     )
 
 
 @router.get("/status", response_model=UserStatusResponse)
-async def get_status(client_id: str):
+async def get_status(client_id: str = Depends(require_auth)):
     """Get the current user's tier, usage, and subscription status."""
     user = user_store.get_or_create(client_id)
     user.reset_if_needed()
@@ -60,9 +63,9 @@ async def get_status(client_id: str):
 
 
 @router.post("/upgrade", response_model=UpgradeResponse)
-async def upgrade(request: UpgradeRequest):
+async def upgrade(request: UpgradeRequest, client_id: str = Depends(require_auth)):
     """Create a Stripe Checkout session for upgrading to Pro."""
-    user = user_store.get_or_create(request.client_id)
+    user = user_store.get_or_create(client_id)
 
     if user.tier == Tier.PRO:
         raise HTTPException(status_code=400, detail="Already on Pro tier")
@@ -71,7 +74,7 @@ async def upgrade(request: UpgradeRequest):
         raise HTTPException(status_code=400, detail="Already on Enterprise tier")
 
     if not user.stripe_customer_id:
-        customer_id = await create_customer(request.client_id)
+        customer_id = await create_customer(client_id)
         user.stripe_customer_id = customer_id
         user_store.save(user)
     else:
@@ -83,7 +86,7 @@ async def upgrade(request: UpgradeRequest):
             price_id="",
             success_url=request.success_url,
             cancel_url=request.cancel_url,
-            client_id=request.client_id,
+            client_id=client_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -92,9 +95,9 @@ async def upgrade(request: UpgradeRequest):
 
 
 @router.post("/portal", response_model=PortalResponse)
-async def billing_portal(request: PortalRequest):
+async def billing_portal(request: PortalRequest, client_id: str = Depends(require_auth)):
     """Get a Stripe Customer Portal URL for managing subscription."""
-    user = user_store.get_by_client_id(request.client_id)
+    user = user_store.get_by_client_id(client_id)
     if not user or not user.stripe_customer_id:
         raise HTTPException(status_code=404, detail="No billing account found. Upgrade first.")
 

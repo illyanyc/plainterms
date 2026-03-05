@@ -50,9 +50,37 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (pending && pending.policyText) {
-      handleAnalyze(pending.url, pending.policyText, pending.policyType, "quick");
-    }
+    if (!pending) return;
+
+    const run = async () => {
+      let text = pending.policyText;
+
+      if (!text) {
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab?.id) {
+            const res: { text: string; truncated: boolean } = await new Promise(
+              (resolve, reject) => {
+                chrome.tabs.sendMessage(
+                  tab.id!,
+                  { type: "EXTRACT_TEXT", payload: { url: pending.url } },
+                  (r) => (r ? resolve(r) : reject(new Error("extraction failed")))
+                );
+              }
+            );
+            text = res.text;
+          }
+        } catch {
+          // fall through with empty text
+        }
+      }
+
+      if (text) {
+        handleAnalyze(pending.url, text, pending.policyType, "quick");
+      }
+    };
+
+    run();
   }, [pending]);
 
   const handleAnalyze = useCallback(

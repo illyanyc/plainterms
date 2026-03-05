@@ -6,7 +6,7 @@ export default defineConfig({
     name: "PlainTerms - Policy Analyzer",
     description:
       "Instantly understand any Privacy Policy or Terms of Service. AI-powered red flag detection, plain English summaries, and actionable insights.",
-    permissions: ["sidePanel", "activeTab", "storage", "contextMenus"],
+    permissions: ["sidePanel", "activeTab", "storage", "contextMenus", "scripting"],
     host_permissions: ["<all_urls>"],
     side_panel: {
       default_path: "sidepanel/index.html",

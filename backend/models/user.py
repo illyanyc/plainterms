@@ -98,6 +98,5 @@ class UserStatusResponse(BaseModel):
 
 
 class UpgradeRequest(BaseModel):
-    client_id: str
-    success_url: str = "https://plainterms.com/success"
-    cancel_url: str = "https://plainterms.com/cancel"
+    success_url: str = "https://plain-terms.app/success"
+    cancel_url: str = "https://plain-terms.app/cancel"

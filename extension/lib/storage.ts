@@ -30,7 +30,16 @@ export async function setEnabled(enabled: boolean): Promise<void> {
 
 export async function getBackendUrl(): Promise<string> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.BACKEND_URL);
-  return result[STORAGE_KEYS.BACKEND_URL] ?? "http://localhost:8000";
+  return result[STORAGE_KEYS.BACKEND_URL] ?? "https://plainterms-production.up.railway.app";
+}
+
+export async function getToken(): Promise<string | null> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.JWT_TOKEN);
+  return result[STORAGE_KEYS.JWT_TOKEN] ?? null;
+}
+
+export async function setToken(token: string): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.JWT_TOKEN]: token });
 }
 
 export async function getCachedAnalysis(cacheKey: string): Promise<AnalysisResult | null> {

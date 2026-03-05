@@ -1,7 +1,38 @@
 import type { AnalysisMode, PolicyType, SSEEvent, SSEEventType } from "../types";
-import { getBackendUrl, getClientId } from "./storage";
+import { getBackendUrl, getClientId, getToken, setToken } from "./storage";
 
 export type SSECallback = (event: SSEEventType, data: unknown) => void;
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getToken();
+  if (!token) return { "Content-Type": "application/json" };
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function ensureRegistered(): Promise<string> {
+  let token = await getToken();
+  if (token) return token;
+
+  const backendUrl = await getBackendUrl();
+  const clientId = await getClientId();
+
+  const response = await fetch(`${backendUrl}/api/v1/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+
+  if (!response.ok) throw new Error(`Registration failed (${response.status})`);
+
+  const data = await response.json();
+  token = data.token;
+  if (!token) throw new Error("Server did not return a token");
+  await setToken(token);
+  return token;
+}
 
 export async function streamAnalysis(
   url: string,
@@ -11,24 +42,28 @@ export async function streamAnalysis(
   onEvent: SSECallback,
   signal?: AbortSignal
 ): Promise<void> {
+  await ensureRegistered();
   const backendUrl = await getBackendUrl();
-  const clientId = await getClientId();
+  const headers = await authHeaders();
+  headers["Accept"] = "text/event-stream";
   const endpoint = mode === "deep" ? "analyze/deep" : "analyze/quick";
 
   const response = await fetch(`${backendUrl}/api/v1/${endpoint}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-    },
+    headers,
     body: JSON.stringify({
       url,
       policy_text: policyText,
       policy_type: policyType,
-      client_id: clientId,
     }),
     signal,
   });
+
+  if (response.status === 401) {
+    await setToken("");
+    await ensureRegistered();
+    return streamAnalysis(url, policyText, policyType, mode, onEvent, signal);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -93,40 +128,39 @@ export interface UserStatus {
 }
 
 export async function registerUser(): Promise<UserStatus> {
-  const backendUrl = await getBackendUrl();
-  const clientId = await getClientId();
-
-  await fetch(`${backendUrl}/api/v1/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId }),
-  });
-
+  await ensureRegistered();
   return fetchUserStatus();
 }
 
 export async function fetchUserStatus(): Promise<UserStatus> {
+  await ensureRegistered();
   const backendUrl = await getBackendUrl();
-  const clientId = await getClientId();
+  const headers = await authHeaders();
 
-  const response = await fetch(
-    `${backendUrl}/api/v1/auth/status?client_id=${encodeURIComponent(clientId)}`,
-    { signal: AbortSignal.timeout(5000) }
-  );
+  const response = await fetch(`${backendUrl}/api/v1/auth/status`, {
+    headers,
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (response.status === 401) {
+    await setToken("");
+    await ensureRegistered();
+    return fetchUserStatus();
+  }
 
   if (!response.ok) throw new Error("Failed to fetch user status");
   return response.json();
 }
 
 export async function getUpgradeUrl(): Promise<string> {
+  await ensureRegistered();
   const backendUrl = await getBackendUrl();
-  const clientId = await getClientId();
+  const headers = await authHeaders();
 
   const response = await fetch(`${backendUrl}/api/v1/auth/upgrade`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
-      client_id: clientId,
       success_url: `${backendUrl}/api/v1/health`,
       cancel_url: `${backendUrl}/api/v1/health`,
     }),
@@ -142,13 +176,14 @@ export async function getUpgradeUrl(): Promise<string> {
 }
 
 export async function getBillingPortalUrl(): Promise<string> {
+  await ensureRegistered();
   const backendUrl = await getBackendUrl();
-  const clientId = await getClientId();
+  const headers = await authHeaders();
 
   const response = await fetch(`${backendUrl}/api/v1/auth/portal`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId }),
+    headers,
+    body: JSON.stringify({}),
   });
 
   if (!response.ok) {
