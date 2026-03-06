@@ -18,7 +18,15 @@ export default defineBackground(() => {
     }
   });
 
-  chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
+    if (message.type === "FETCH_URL") {
+      fetch(message.url)
+        .then((r) => r.text())
+        .then((html) => sendResponse({ html }))
+        .catch((e) => sendResponse({ html: "", error: e.message }));
+      return true;
+    }
+
     switch (message.type) {
       case "LINKS_DETECTED": {
         const tabId = sender.tab?.id ?? message.payload.tabId;

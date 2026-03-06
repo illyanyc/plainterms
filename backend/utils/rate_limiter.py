@@ -1,5 +1,8 @@
+import os
 import time
 from collections import defaultdict
+
+_DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 
 class SlidingWindowRateLimiter:
@@ -11,6 +14,8 @@ class SlidingWindowRateLimiter:
         self._requests: dict[str, list[float]] = defaultdict(list)
 
     def is_allowed(self, key: str) -> bool:
+        if _DEBUG:
+            return True
         now = time.time()
         cutoff = now - self._window_seconds
         timestamps = self._requests[key]

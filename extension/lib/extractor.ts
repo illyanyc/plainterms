@@ -2,17 +2,25 @@ import { MAX_POLICY_TEXT_LENGTH } from "./constants";
 
 export async function extractPolicyText(url: string): Promise<{ text: string; truncated: boolean }> {
   try {
-    const response = await fetch(url);
-    const html = await response.text();
-    const text = extractTextFromHtml(html);
-    const truncated = text.length > MAX_POLICY_TEXT_LENGTH;
-    return {
-      text: truncated ? text.slice(0, MAX_POLICY_TEXT_LENGTH) : text,
-      truncated,
-    };
-  } catch {
-    return extractFromCurrentPage();
-  }
+    const response: { html: string; error?: string } = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "FETCH_URL", url }, (res) => {
+        resolve(res ?? { html: "" });
+      });
+    });
+
+    if (response.html && !response.error) {
+      const text = extractTextFromHtml(response.html);
+      if (text.length > 200) {
+        const truncated = text.length > MAX_POLICY_TEXT_LENGTH;
+        return {
+          text: truncated ? text.slice(0, MAX_POLICY_TEXT_LENGTH) : text,
+          truncated,
+        };
+      }
+    }
+  } catch {}
+
+  return extractFromCurrentPage();
 }
 
 function extractTextFromHtml(html: string): string {

@@ -14,6 +14,7 @@ export const DEFAULT_BACKEND_URL = "https://plainterms-production.up.railway.app
 
 export const POLICY_KEYWORDS: Record<PolicyType, string[]> = {
   privacy: [
+    "privacy",
     "privacy policy",
     "privacy notice",
     "privacy statement",
@@ -24,6 +25,7 @@ export const POLICY_KEYWORDS: Record<PolicyType, string[]> = {
     "privacy practices",
   ],
   terms: [
+    "terms",
     "terms of service",
     "terms of use",
     "terms and conditions",

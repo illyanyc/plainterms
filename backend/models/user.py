@@ -1,8 +1,11 @@
+import os
 from datetime import datetime, date
 from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 
 class Tier(str, Enum):
@@ -70,10 +73,14 @@ class User(BaseModel):
         return max(0, int(remaining)) if remaining != float("inf") else 999
 
     def can_quick_scan(self) -> bool:
+        if DEBUG:
+            return True
         self.reset_if_needed()
         return self.quick_scans_today < self.quick_limit
 
     def can_deep_scan(self) -> bool:
+        if DEBUG:
+            return True
         self.reset_if_needed()
         return self.deep_scans_this_month < self.deep_limit
 

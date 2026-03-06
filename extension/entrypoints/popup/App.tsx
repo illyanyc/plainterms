@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import type { DetectedLink } from "../../types";
-import { isEnabled, setEnabled } from "../../lib/storage";
+import { setEnabled } from "../../lib/storage";
 import {
   checkBackendHealth,
   fetchUserStatus,
@@ -19,18 +19,84 @@ export default function App() {
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [scanning, setScanning] = useState(false);
+  const [scanning, setScanning] = useState(true);
 
-  const refreshLinks = () => {
-    chrome.runtime.sendMessage({ type: "GET_DETECTED_LINKS" }, (response) => {
-      if (response) setLinks(response);
-      setScanning(false);
-    });
-  };
+  async function getActiveTabId(): Promise<number | null> {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab?.id ?? null;
+  }
+
+  async function scanPage(): Promise<void> {
+    setScanning(true);
+    const tabId = await getActiveTabId();
+    if (!tabId) { setScanning(false); return; }
+
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const HREF_KW = ["privacy","terms","tos","legal","cookie","refund","return","cancellation","eula","policy","disclaimer","agreement"];
+          const TEXT_KW: Record<string, string[]> = {
+            privacy: ["privacy","privacy policy","privacy notice","privacy statement","data protection","data privacy"],
+            terms: ["terms","terms of service","terms of use","terms and conditions","terms & conditions","t&c","tos","user agreement","service agreement","legal terms"],
+            cookie: ["cookie policy","cookie notice","cookie preferences","cookie settings","use of cookies"],
+            refund: ["refund policy","return policy","cancellation policy","billing terms","subscription terms","money back","returns & refunds"],
+            other: ["eula","end user license","acceptable use","aup","dmca","copyright policy","legal notice","legal","disclaimer","community guidelines"],
+          };
+
+          function inferType(href: string): string {
+            if (href.includes("privacy")) return "privacy";
+            if (href.includes("terms") || href.includes("tos")) return "terms";
+            if (href.includes("cookie")) return "cookie";
+            if (href.includes("refund") || href.includes("return")) return "refund";
+            return "other";
+          }
+
+          const found: { url: string; text: string; policyType: string; score: number }[] = [];
+          const seen = new Set<string>();
+
+          for (const a of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+            const href = a.href;
+            const text = (a.textContent || "").trim().toLowerCase().replace(/\s+/g, " ");
+            if (!text || text.length > 200 || seen.has(href)) continue;
+            seen.add(href);
+
+            let matched = false;
+            for (const [type, kws] of Object.entries(TEXT_KW)) {
+              for (const kw of kws) {
+                if (text === kw || text.includes(kw)) {
+                  found.push({ url: href, text: (a.textContent || "").trim(), policyType: type, score: text === kw ? 1 : 0.8 });
+                  matched = true;
+                  break;
+                }
+              }
+              if (matched) break;
+            }
+
+            if (!matched) {
+              const lhref = href.toLowerCase();
+              for (const kw of HREF_KW) {
+                if (lhref.includes(kw)) {
+                  found.push({ url: href, text: (a.textContent || "").trim(), policyType: inferType(lhref), score: 0.6 });
+                  break;
+                }
+              }
+            }
+          }
+          return found;
+        },
+      });
+
+      const detected = results?.[0]?.result ?? [];
+      setLinks(detected as Omit<DetectedLink, "element">[]);
+    } catch {
+      setLinks([]);
+    }
+    setScanning(false);
+  }
 
   useEffect(() => {
-    refreshLinks();
-    isEnabled().then(setEnabledState);
+    scanPage();
     checkBackendHealth().then(setBackendOk);
     registerUser().then(setUserStatus).catch(() => {
       fetchUserStatus().then(setUserStatus).catch(() => {});
@@ -44,44 +110,35 @@ export default function App() {
 
     if (!next) {
       setLinks([]);
-    } else {
-      setScanning(true);
-    }
-
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
-
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: "SET_ENABLED", payload: { enabled: next } });
-    } catch {
-      if (next) {
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ["content-scripts/content.js"],
-          });
-        } catch {
-          setScanning(false);
-        }
+      const tabId = await getActiveTabId();
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { type: "SET_ENABLED", payload: { enabled: false } }).catch(() => {});
       }
-    }
-
-    if (next) {
-      setTimeout(refreshLinks, 800);
+    } else {
+      await scanPage();
     }
   };
 
   const handleAnalyze = async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || links.length === 0) return;
+    const tabId = await getActiveTabId();
+    if (!tabId || links.length === 0) return;
 
     const link = links[0];
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content-scripts/content.js"],
+      }).catch(() => {});
+    } catch {}
+
+    await new Promise((r) => setTimeout(r, 200));
 
     try {
       const response: { text: string; truncated: boolean } = await new Promise(
         (resolve, reject) => {
           chrome.tabs.sendMessage(
-            tab.id!,
+            tabId,
             { type: "EXTRACT_TEXT", payload: { url: link.url } },
             (res) => (res ? resolve(res) : reject(new Error("No response")))
           );
@@ -105,7 +162,7 @@ export default function App() {
       });
     }
 
-    await chrome.sidePanel.open({ tabId: tab.id });
+    await chrome.sidePanel.open({ tabId });
     window.close();
   };
 
@@ -127,9 +184,7 @@ export default function App() {
       const url = await getBillingPortalUrl();
       chrome.tabs.create({ url });
       window.close();
-    } catch {
-      // No billing account
-    }
+    } catch {}
   };
 
   const tier = userStatus?.tier ?? "free";
@@ -215,7 +270,7 @@ export default function App() {
               Privacy Policy
             </button>
             <button
-              onClick={() => openLink(`${SITE_URL}/privacy/`)}
+              onClick={() => openLink(`${SITE_URL}/terms/`)}
               className="w-full flex items-center gap-2.5 px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-left"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -233,14 +288,29 @@ export default function App() {
 
       {/* Detected links */}
       <div className={`mb-4 ${!enabled ? "opacity-50" : ""}`}>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-          {!enabled ? "Detection disabled" : scanning ? "Scanning page..." : "Detected on this page"}
-        </p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {!enabled ? "Detection disabled" : scanning ? "Scanning page..." : "Detected on this page"}
+          </p>
+          {enabled && !scanning && (
+            <button
+              onClick={scanPage}
+              className="text-[10px] text-blue-500 hover:text-blue-400 transition-colors flex items-center gap-1"
+              title="Rescan page"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+              </svg>
+              Rescan
+            </button>
+          )}
+        </div>
         {enabled && !scanning && links.length > 0 ? (
           <div className="space-y-1">
             {links.map((link, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="badge-info">{link.policyType}</span>
+                <span className="inline-block px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-[10px] font-medium">{link.policyType}</span>
                 <span className="truncate text-gray-700 dark:text-gray-300">{link.text}</span>
               </div>
             ))}
@@ -255,10 +325,10 @@ export default function App() {
       {/* Actions */}
       <button
         onClick={handleAnalyze}
-        disabled={links.length === 0}
+        disabled={links.length === 0 || scanning}
         className="w-full py-2 px-3 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-2"
       >
-        Analyze Policies ({links.length})
+        {scanning ? "Scanning..." : `Analyze Policies (${links.length})`}
       </button>
 
       {/* Upgrade / Manage */}

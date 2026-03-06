@@ -79,6 +79,19 @@ export default defineContentScript({
     }, 2000);
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message.type === "PING") {
+        sendResponse({ ok: true });
+        return true;
+      }
+
+      if (message.type === "SCAN_NOW") {
+        if (!active) startDetection();
+        const freshLinks = scanForLegalLinks();
+        if (freshLinks.length > 0) processLinks(freshLinks);
+        sendResponse(detectedLinks.map(({ element, ...rest }) => rest));
+        return true;
+      }
+
       if (message.type === "GET_DETECTED_LINKS") {
         sendResponse(detectedLinks.map(({ element, ...rest }) => rest));
         return true;
