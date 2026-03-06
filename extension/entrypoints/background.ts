@@ -83,10 +83,26 @@ export default defineBackground(() => {
     tabLinks.delete(tabId);
   });
 
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.status === "loading") {
       tabLinks.delete(tabId);
       chrome.action.setBadgeText({ text: "", tabId });
+    }
+    if (changeInfo.status === "complete" && tab.url) {
+      chrome.runtime.sendMessage({
+        type: "TAB_NAVIGATED",
+        payload: { tabId, url: tab.url },
+      }).catch(() => {});
+    }
+  });
+
+  chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab.url) {
+      chrome.runtime.sendMessage({
+        type: "TAB_NAVIGATED",
+        payload: { tabId: activeInfo.tabId, url: tab.url },
+      }).catch(() => {});
     }
   });
 });

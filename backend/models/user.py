@@ -24,7 +24,7 @@ class SubscriptionStatus(str, Enum):
 
 
 TIER_LIMITS = {
-    Tier.FREE: {"quick_per_day": 5, "deep_per_month": 0},
+    Tier.FREE: {"quick_per_day": 50, "deep_per_month": 0},
     Tier.PRO: {"quick_per_day": 20, "deep_per_month": 50},
     Tier.ENTERPRISE: {"quick_per_day": float("inf"), "deep_per_month": float("inf")},
 }
