@@ -1,6 +1,6 @@
 """In-memory user store. Replace with SQLite/Postgres for production persistence."""
 
-from models.user import User, Tier, SubscriptionStatus
+from models.user import User, Tier, SubscriptionStatus, PRO_DEBUG
 
 
 class UserStore:
@@ -11,6 +11,9 @@ class UserStore:
         if client_id not in self._users:
             self._users[client_id] = User(client_id=client_id)
         user = self._users[client_id]
+        if PRO_DEBUG and user.tier == Tier.FREE:
+            user.tier = Tier.PRO
+            user.subscription_status = SubscriptionStatus.ACTIVE
         user.reset_if_needed()
         return user
 

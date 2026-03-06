@@ -6,6 +6,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+PRO_DEBUG = os.environ.get("PRO_DEBUG", "").lower() in ("1", "true", "yes")
 
 
 class Tier(str, Enum):
