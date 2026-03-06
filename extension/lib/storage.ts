@@ -71,8 +71,8 @@ export async function getUsage(): Promise<UsageInfo> {
   const now = new Date();
 
   const limits = {
-    free: { quickDaily: 50, deepMonthly: 0 },
-    pro: { quickDaily: 20, deepMonthly: 50 },
+    free: { quickDaily: 10, deepMonthly: 0 },
+    pro: { quickDaily: 50, deepMonthly: 50 },
     enterprise: { quickDaily: Infinity, deepMonthly: Infinity },
   };
 
